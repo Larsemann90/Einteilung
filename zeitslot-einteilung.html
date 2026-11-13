@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Zeitslot-Einteilung</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#f6f7f9;--card:#fff;--tx:#1b1f24;--mu:#6a7380;--ac:#2f6fed;--bd:#dfe3e8;--ok:#1f9d55;--bad:#d93d3d;--okbg:#e6f6ec;--badbg:#fdecec}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14171b;--card:#1d2127;--tx:#e8eaed;--mu:#97a0ad;--ac:#6d9bff;--bd:#2f353d;--ok:#4cc27d;--bad:#ff7070;--okbg:#17301f;--badbg:#3a1c1c}}
+:root[data-theme="dark"]{--bg:#14171b;--card:#1d2127;--tx:#e8eaed;--mu:#97a0ad;--ac:#6d9bff;--bd:#2f353d;--ok:#4cc27d;--bad:#ff7070;--okbg:#17301f;--badbg:#3a1c1c}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:760px;margin:0 auto;padding:16px}
+h1{font-size:1.4rem;margin:.2em 0 .8em}
+h2{font-size:1.05rem;margin:0 0 .6em}
+section{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:14px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+input[type=text],input[type=number]{padding:9px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit;min-width:0}
+input[type=text]{flex:1 1 140px}
+input[type=number]{width:70px}
+input.cp{width:56px;padding:2px 4px}
+textarea{flex:1 1 200px;padding:9px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit;resize:vertical;min-width:0}
+button{padding:9px 14px;border:0;border-radius:8px;background:var(--ac);color:#fff;font:inherit;cursor:pointer}
+button.s{background:transparent;color:var(--mu);border:1px solid var(--bd);padding:6px 10px}
+button.x{background:transparent;color:var(--bad);padding:2px 8px;font-size:1.1rem}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.chip{display:flex;align-items:center;gap:4px;border:1px solid var(--bd);border-radius:999px;padding:3px 4px 3px 12px;font-size:.92rem}
+.chip small{color:var(--mu)}
+.sc{overflow-x:auto}
+table{border-collapse:collapse;width:100%}
+th,td{padding:6px 8px;text-align:center;border-bottom:1px solid var(--bd);white-space:nowrap}
+th:first-child,td:first-child{text-align:left;position:sticky;left:0;background:var(--card)}
+th{font-size:.85rem;color:var(--mu);font-weight:600}
+td input{width:20px;height:20px;accent-color:var(--ac)}
+.res{display:grid;gap:10px}
+.box{border:1px solid var(--bd);border-radius:10px;padding:10px 12px}
+.box.bad{background:var(--badbg);border-color:var(--bad)}
+.box.ok{background:var(--okbg)}
+.box b{display:block;margin-bottom:4px}
+.mu{color:var(--mu);font-size:.9rem}
+.empty{color:var(--mu);font-style:italic}
+</style>
+</head>
+<body>
+<main>
+<h1>Zeitslot-Einteilung</h1>
+
+<section>
+<h2>1. Zeitslots</h2>
+<div class="row">
+<input type="text" id="sn" placeholder="Slotname, z. B. Mo 10:00">
+<input type="number" id="sc" min="1" value="4" title="Plätze">
+<button id="sa">Hinzufügen</button>
+</div>
+<div class="mu" style="margin-top:6px">Zahl = Plätze pro Slot (Standard 4, bei jedem Slot nachträglich änderbar)</div>
+<div class="chips" id="sl"></div>
+</section>
+
+<section>
+<h2>2. Personen &amp; Verfügbarkeit</h2>
+<div class="row">
+<textarea id="pn" rows="4" placeholder="Namen eintragen: einer pro Zeile oder mit Komma getrennt"></textarea>
+<button id="pa">Hinzufügen</button>
+</div>
+<div class="sc" style="margin-top:10px" id="mx"></div>
+</section>
+
+<section>
+<div class="row">
+<button id="go">Einteilen</button>
+<button class="s" id="sh">Neu mischen</button>
+<button class="s" id="cp">Ergebnis kopieren</button>
+<button class="s" id="rs">Alles löschen</button>
+</div>
+<div class="res" id="out" style="margin-top:12px"></div>
+</section>
+</main>
+
+<script>
+var S={slots:[],persons:[]},R=null,uid=1;
+try{var d=JSON.parse(localStorage.getItem('zs')||'null');if(d&&d.slots&&d.persons){S=d;uid=Math.max(1,...S.slots.map(function(x){return x.id}),...S.persons.map(function(x){return x.id}))+1}}catch(e){}
+function save(){try{localStorage.setItem('zs',JSON.stringify(S))}catch(e){}}
+function $(i){return document.getElementById(i)}
+function esc(t){return String(t).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+
+function render(){
+ $('sl').innerHTML=S.slots.length?S.slots.map(function(s){return '<span class="chip">'+esc(s.name)+' <input type="number" min="1" class="cp" data-cs="'+s.id+'" value="'+s.cap+'" title="Plätze"><button class="x" data-ds="'+s.id+'">×</button></span>'}).join(''):'<span class="empty">Noch keine Slots</span>';
+ if(!S.persons.length||!S.slots.length){$('mx').innerHTML='<span class="empty">Lege Slots und Personen an, dann erscheint hier die Tabelle.</span>';return}
+ var h='<table><tr><th>Person</th>'+S.slots.map(function(s){return '<th>'+esc(s.name)+'</th>'}).join('')+'<th></th></tr>';
+ S.persons.forEach(function(p){
+  h+='<tr><td>'+esc(p.name)+'</td>'+S.slots.map(function(s){return '<td><input type="checkbox" data-p="'+p.id+'" data-s="'+s.id+'"'+(p.av.indexOf(s.id)>-1?' checked':'')+'></td>'}).join('')+'<td><button class="x" data-dp="'+p.id+'">×</button></td></tr>'});
+ $('mx').innerHTML=h+'</table>';
+}
+
+function addSlot(){var n=$('sn').value.trim();if(!n)return;S.slots.push({id:uid++,name:n,cap:Math.max(1,parseInt($('sc').value)||1)});$('sn').value='';$('sc').value=4;R=null;save();render();out()}
+function addPerson(){var ns=$('pn').value.split(/[\n,;]+/).map(function(x){return x.trim()}).filter(Boolean);if(!ns.length)return;ns.forEach(function(n){S.persons.push({id:uid++,name:n,av:[]})});$('pn').value='';R=null;save();render();out()}
+$('sa').onclick=addSlot;$('pa').onclick=addPerson;
+$('sn').onkeydown=function(e){if(e.key==='Enter')addSlot()};
+$('pn').onkeydown=function(e){if(e.key==='Enter'&&(e.ctrlKey||e.metaKey))addPerson()};
+
+document.addEventListener('click',function(e){
+ var t=e.target;
+ if(t.dataset.ds){var id=+t.dataset.ds;S.slots=S.slots.filter(function(s){return s.id!==id});S.persons.forEach(function(p){p.av=p.av.filter(function(x){return x!==id})});R=null;save();render();out()}
+ if(t.dataset.dp){var pid=+t.dataset.dp;S.persons=S.persons.filter(function(p){return p.id!==pid});R=null;save();render();out()}
+});
+document.addEventListener('change',function(e){
+ var t=e.target;if(t.dataset.cs){var sl=S.slots.filter(function(x){return x.id==t.dataset.cs})[0];sl.cap=Math.max(1,parseInt(t.value)||1);R=null;save();render();out();return}if(t.dataset.p===undefined)return;
+ var p=S.persons.filter(function(x){return x.id==t.dataset.p})[0],s=+t.dataset.s;
+ p.av=p.av.filter(function(x){return x!==s});if(t.checked)p.av.push(s);
+ R=null;save();out()});
+
+function shuf(a){a=a.slice();for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=a[i];a[i]=a[j];a[j]=t}return a}
+
+function solve(){
+ var cap={},asg={};
+ S.slots.forEach(function(s){cap[s.id]=s.cap;asg[s.id]=[]});
+ function tryP(p,vis){
+  var opts=shuf(p.av.filter(function(x){return cap[x]!==undefined}));
+  for(var i=0;i<opts.length;i++){
+   var s=opts[i];if(vis[s])continue;vis[s]=1;
+   if(asg[s].length<cap[s]){asg[s].push(p);return true}
+   for(var k=0;k<asg[s].length;k++){if(tryP(asg[s][k],vis)){asg[s][k]=p;return true}}
+  }
+  return false;
+ }
+ var un=[];
+ shuf(S.persons).forEach(function(p){if(!tryP(p,{}))un.push(p)});
+ R={asg:asg,un:un};
+}
+
+function out(){
+ var o=$('out');
+ if(!R){o.innerHTML='<span class="empty">Noch keine Einteilung berechnet.</span>';return}
+ var h='';
+ if(R.un.length){
+  h+='<div class="box bad"><b>Nicht einteilbar ('+R.un.length+')</b>'+R.un.map(function(p){return esc(p.name)+(p.av.length?'':' <span class="mu">(keine Zeit angegeben)</span>')}).join(', ')+'<div class="mu" style="margin-top:6px">Alle Slots, in denen diese Personen Zeit haben, sind sonst nicht ausreichend besetzbar. Mehr Plätze oder weitere Verfügbarkeiten würden helfen.</div></div>';
+ }else if(S.persons.length){
+  h+='<div class="box ok"><b>Alle '+S.persons.length+' Personen eingeteilt ✓</b></div>';
+ }
+ S.slots.forEach(function(s){
+  var l=R.asg[s.id];
+  h+='<div class="box"><b>'+esc(s.name)+' <span class="mu">('+l.length+'/'+s.cap+')</span></b>'+(l.length?l.map(function(p){return esc(p.name)}).join(', '):'<span class="empty">frei</span>')+'</div>';
+ });
+ o.innerHTML=h;
+}
+
+$('go').onclick=function(){solve();out()};
+$('sh').onclick=function(){solve();out()};
+$('cp').onclick=function(){
+ if(!R)return;
+ var t=S.slots.map(function(s){return s.name+': '+(R.asg[s.id].map(function(p){return p.name}).join(', ')||'–')}).join('\n');
+ if(R.un.length)t+='\nNicht eingeteilt: '+R.un.map(function(p){return p.name}).join(', ');
+ try{navigator.clipboard.writeText(t)}catch(e){}
+};
+$('rs').onclick=function(){if(confirm('Wirklich alle Slots und Personen löschen?')){S={slots:[],persons:[]};R=null;save();render();out()}};
+
+render();out();
+</script>
+</body>
+</html>
