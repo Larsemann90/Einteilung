@@ -41,6 +41,13 @@ td input{width:20px;height:20px;accent-color:var(--ac)}
 .box b{display:block;margin-bottom:4px}
 .mu{color:var(--mu);font-size:.9rem}
 .empty{color:var(--mu);font-style:italic}
+@media print{
+:root:root:root{--bg:#fff;--card:#fff;--tx:#000;--mu:#555;--bd:#bbb;--okbg:#fff;--badbg:#fff;--ok:#000;--bad:#000}
+body{background:#fff}
+.row,main>section:not(:last-of-type){display:none}
+main>section:last-of-type{border:0;padding:0}
+.box{break-inside:avoid}
+}
 </style>
 </head>
 <body>
@@ -72,6 +79,7 @@ td input{width:20px;height:20px;accent-color:var(--ac)}
 <button id="go">Einteilen</button>
 <button class="s" id="sh">Neu mischen</button>
 <button class="s" id="cp">Ergebnis kopieren</button>
+<button class="s" id="pd">Als PDF speichern</button>
 <button class="s" id="rs">Alles löschen</button>
 </div>
 <div class="res" id="out" style="margin-top:12px"></div>
@@ -154,6 +162,7 @@ $('cp').onclick=function(){
  if(R.un.length)t+='\nNicht eingeteilt: '+R.un.map(function(p){return p.name}).join(', ');
  try{navigator.clipboard.writeText(t)}catch(e){}
 };
+$('pd').onclick=function(){if(!R){solve();out()}window.print()};
 $('rs').onclick=function(){if(confirm('Wirklich alle Slots und Personen löschen?')){S={slots:[],persons:[]};R=null;save();render();out()}};
 
 render();out();
