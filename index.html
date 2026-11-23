@@ -41,6 +41,13 @@ td input{width:20px;height:20px;accent-color:var(--ac)}
 .box b{display:block;margin-bottom:4px}
 .mu{color:var(--mu);font-size:.9rem}
 .empty{color:var(--mu);font-style:italic}
+.pc{display:inline-block;margin:3px 6px 3px 0;padding:6px 12px;border:1px solid var(--bd);border-radius:999px;background:var(--bg);cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.pc.lift{opacity:.35}
+.pc.ghost{position:fixed;z-index:99;pointer-events:none;margin:0;box-shadow:0 4px 14px rgba(0,0,0,.3);transform:translate(-50%,-130%)}
+.zone{transition:background .12s,border-color .12s}
+.dragging .zone.can{background:var(--okbg);border-color:var(--ok);box-shadow:0 0 10px var(--ok)}
+.dragging .zone.hov{outline:2px solid var(--ac)}
+.over{color:var(--bad);font-weight:700}
 @media print{
 :root:root:root{--bg:#fff;--card:#fff;--tx:#000;--mu:#555;--bd:#bbb;--okbg:#fff;--badbg:#fff;--ok:#000;--bad:#000}
 body{background:#fff}
@@ -49,6 +56,7 @@ main>section:last-of-type{border:0;padding:0}
 .box{break-inside:avoid}
 }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
 <main>
@@ -89,7 +97,7 @@ main>section:last-of-type{border:0;padding:0}
 <script>
 var S={slots:[],persons:[]},R=null,uid=1;
 try{var d=JSON.parse(localStorage.getItem('zs')||'null');if(d&&d.slots&&d.persons){S=d;uid=Math.max(1,...S.slots.map(function(x){return x.id}),...S.persons.map(function(x){return x.id}))+1}}catch(e){}
-function save(){try{localStorage.setItem('zs',JSON.stringify(S))}catch(e){}}
+function save(){try{localStorage.setItem('zs',JSON.stringify(S));localStorage.setItem('zr',JSON.stringify(R?{u:R.un.map(function(p){return p.id}),a:Object.keys(R.asg).reduce(function(o,k){o[k]=R.asg[k].map(function(p){return p.id});return o},{})}:null))}catch(e){}}
 function $(i){return document.getElementById(i)}
 function esc(t){return String(t).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 
@@ -135,10 +143,10 @@ function solve(){
  }
  var un=[];
  shuf(S.persons).forEach(function(p){if(!tryP(p,{}))un.push(p)});
- R={asg:asg,un:un};
+ R={asg:asg,un:un};save();
 }
 
-function out(){
+function outOld(){
  var o=$('out');
  if(!R){o.innerHTML='<span class="empty">Noch keine Einteilung berechnet.</span>';return}
  var h='';
@@ -162,10 +170,71 @@ $('cp').onclick=function(){
  if(R.un.length)t+='\nNicht eingeteilt: '+R.un.map(function(p){return p.name}).join(', ');
  try{navigator.clipboard.writeText(t)}catch(e){}
 };
-$('pd').onclick=function(){if(!R){solve();out()}window.print()};
+$('pd').onclick=pdf;
 $('rs').onclick=function(){if(confirm('Wirklich alle Slots und Personen löschen?')){S={slots:[],persons:[]};R=null;save();render();out()}};
 
-render();out();
+function pdf(){
+ if(!R){solve();out()}
+ if(!window.jspdf){window.print();return}
+ var d=new window.jspdf.jsPDF(),y=20,M=18;
+ function ln(t,sz,b,g){d.setFont('helvetica',b?'bold':'normal');d.setFontSize(sz);if(y>280){d.addPage();y=20}d.text(String(t),M,y);y+=g}
+ ln('Zeitslot-Einteilung',18,1,10);
+ S.slots.forEach(function(s){var l=R.asg[s.id];y+=3;ln(s.name+'  ('+l.length+'/'+s.cap+')',13,1,7);if(!l.length)ln('-',11,0,6);l.forEach(function(p){ln('- '+p.name,11,0,6)})});
+ if(R.un.length){y+=3;ln('Nicht eingeteilt',13,1,7);R.un.forEach(function(p){ln('- '+p.name,11,0,6)})}
+ d.save('Zeitslot-Einteilung.pdf');
+}
+
+function pc(p){return '<span class="pc" data-pid="'+p.id+'">'+esc(p.name)+'</span>'}
+function out(){
+ var o=$('out');
+ if(!R){o.innerHTML='<span class="empty">Noch keine Einteilung berechnet.</span>';return}
+ var h='<div class="mu">Namen ziehen und ablegen: grün leuchtet, wo die Person Zeit hat.</div>';
+ if(S.persons.length)h+='<div class="box zone '+(R.un.length?'bad':'ok')+'" data-z="un"><b>'+(R.un.length?'Nicht eingeteilt ('+R.un.length+')':'Alle '+S.persons.length+' Personen eingeteilt ✓')+'</b>'+R.un.map(pc).join('')+'</div>';
+ S.slots.forEach(function(s){var l=R.asg[s.id];h+='<div class="box zone" data-z="'+s.id+'"><b>'+esc(s.name)+' <span class="mu'+(l.length>s.cap?' over':'')+'">('+l.length+'/'+s.cap+')</span></b>'+(l.length?l.map(pc).join(''):'<span class="empty">frei</span>')+'</div>'});
+ o.innerHTML=h;
+}
+
+function moveTo(p,z){
+ R.un=R.un.filter(function(x){return x.id!==p.id});
+ Object.keys(R.asg).forEach(function(k){R.asg[k]=R.asg[k].filter(function(x){return x.id!==p.id})});
+ if(z!=='un'&&R.asg[z])R.asg[z].push(p);else R.un.push(p);
+ save();out();
+}
+
+var dg=null,dt=0;
+function zoneAt(x,y){var el=document.elementFromPoint(x,y);return el&&el.closest?el.closest('.zone'):null}
+function dmove(e){
+ if(!dg)return;dg.x=e.clientX;dg.y=e.clientY;
+ dg.g.style.left=dg.x+'px';dg.g.style.top=dg.y+'px';
+ document.querySelectorAll('.zone.hov').forEach(function(n){n.classList.remove('hov')});
+ var z=zoneAt(dg.x,dg.y);if(z)z.classList.add('hov');
+}
+function dend(e,drop){
+ if(!dg)return;
+ var z=drop?zoneAt(e.clientX,e.clientY):null,p=dg.p;
+ clearInterval(dt);dg.g.remove();document.body.classList.remove('dragging');dg=null;
+ if(z)moveTo(p,z.dataset.z);else out();
+}
+$('out').addEventListener('pointerdown',function(e){
+ var c=e.target.closest('.pc');if(!c||dg)return;
+ e.preventDefault();
+ var pid=+c.dataset.pid,p=S.persons.filter(function(x){return x.id===pid})[0];if(!p)return;
+ var g=c.cloneNode(true);g.className='pc ghost';document.body.appendChild(g);
+ c.classList.add('lift');document.body.classList.add('dragging');
+ document.querySelectorAll('.zone').forEach(function(z){if(p.av.indexOf(+z.dataset.z)>-1)z.classList.add('can')});
+ dg={p:p,g:g};dmove(e);
+ dt=setInterval(function(){if(!dg)return;if(dg.y<70)window.scrollBy(0,-14);else if(dg.y>innerHeight-70)window.scrollBy(0,14)},16);
+});
+window.addEventListener('pointermove',function(e){if(dg){e.preventDefault();dmove(e)}},{passive:false});
+window.addEventListener('pointerup',function(e){dend(e,true)});
+window.addEventListener('pointercancel',function(e){dend(e,false)});
+
+function loadR(){try{var r=JSON.parse(localStorage.getItem('zr')||'null');if(!r)return;var by={},put={};S.persons.forEach(function(p){by[p.id]=p});R={asg:{},un:[]};
+ function take(ids,t){(ids||[]).forEach(function(i){if(by[i]&&!put[i]){put[i]=1;t.push(by[i])}})}
+ S.slots.forEach(function(s){R.asg[s.id]=[];take((r.a||{})[s.id],R.asg[s.id])});
+ take(r.u,R.un);take(S.persons.map(function(p){return p.id}),R.un)}catch(e){R=null}}
+
+loadR();render();out();
 </script>
 </body>
 </html>
