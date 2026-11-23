@@ -48,6 +48,14 @@ td input{width:20px;height:20px;accent-color:var(--ac)}
 .dragging .zone.can{background:var(--okbg);border-color:var(--ok);box-shadow:0 0 10px var(--ok)}
 .dragging .zone.hov{outline:2px solid var(--ac)}
 .over{color:var(--bad);font-weight:700}
+input[type=time]{padding:9px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit}
+.chip{flex-wrap:wrap;border-radius:12px;padding:6px 8px}
+.chip input{padding:3px 4px;font-size:.9rem}
+.chip input[type=time]{width:96px}
+.pr{display:flex;gap:10px;width:100%;margin:4px 0;border-radius:10px}
+.t{color:var(--mu);font-variant-numeric:tabular-nums;white-space:nowrap}
+.pr.ib{box-shadow:0 -3px 0 var(--ac)}
+.zone.ie .pr:last-of-type{box-shadow:0 3px 0 var(--ac)}
 @media print{
 :root:root:root{--bg:#fff;--card:#fff;--tx:#000;--mu:#555;--bd:#bbb;--okbg:#fff;--badbg:#fff;--ok:#000;--bad:#000}
 body{background:#fff}
@@ -65,11 +73,11 @@ main>section:last-of-type{border:0;padding:0}
 <section>
 <h2>1. Zeitslots</h2>
 <div class="row">
-<input type="text" id="sn" placeholder="Slotname, z. B. Mo 10:00">
+<input type="text" id="sn" placeholder="Tag/Name, z. B. Montag"><input type="time" id="st" value="14:00" title="Beginn"><input type="time" id="en" value="15:00" title="Ende">
 <input type="number" id="sc" min="1" value="4" title="Plätze">
 <button id="sa">Hinzufügen</button>
 </div>
-<div class="mu" style="margin-top:6px">Zahl = Plätze pro Slot (Standard 4, bei jedem Slot nachträglich änderbar)</div>
+<div class="mu" style="margin-top:6px">Reihenfolge: Name, von, bis, Plätze. Dauer pro Gespräch = Slotlänge ÷ Plätze, pro Slot änderbar (Feld „Min.“ leer = automatisch).</div>
 <div class="chips" id="sl"></div>
 </section>
 
@@ -102,7 +110,7 @@ function $(i){return document.getElementById(i)}
 function esc(t){return String(t).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 
 function render(){
- $('sl').innerHTML=S.slots.length?S.slots.map(function(s){return '<span class="chip">'+esc(s.name)+' <input type="number" min="1" class="cp" data-cs="'+s.id+'" value="'+s.cap+'" title="Plätze"><button class="x" data-ds="'+s.id+'">×</button></span>'}).join(''):'<span class="empty">Noch keine Slots</span>';
+ $('sl').innerHTML=S.slots.length?S.slots.map(function(s){return '<span class="chip">'+esc(s.name)+' <input type="time" data-st="'+s.id+'" value="'+tm(s.start)+'"> – <input type="time" data-en="'+s.id+'" value="'+tm(s.end)+'"> <input type="number" min="1" class="cp" data-cs="'+s.id+'" value="'+s.cap+'" title="Plätze"> Pl. <input type="number" min="1" class="cp" data-du="'+s.id+'" value="'+(s.dur||'')+'" placeholder="'+dur(s)+'" title="Minuten pro Gespräch"> Min.<button class="x" data-ds="'+s.id+'">×</button></span>'}).join(''):'<span class="empty">Noch keine Slots</span>';
  if(!S.persons.length||!S.slots.length){$('mx').innerHTML='<span class="empty">Lege Slots und Personen an, dann erscheint hier die Tabelle.</span>';return}
  var h='<table><tr><th>Person</th>'+S.slots.map(function(s){return '<th>'+esc(s.name)+'</th>'}).join('')+'<th></th></tr>';
  S.persons.forEach(function(p){
@@ -110,7 +118,7 @@ function render(){
  $('mx').innerHTML=h+'</table>';
 }
 
-function addSlot(){var n=$('sn').value.trim();if(!n)return;S.slots.push({id:uid++,name:n,cap:Math.max(1,parseInt($('sc').value)||1)});$('sn').value='';$('sc').value=4;R=null;save();render();out()}
+function addSlot(){var n=$('sn').value.trim();if(!n)return;var a=pm($('st').value,840),b=pm($('en').value,a+60);if(b<=a){alert('Das Ende muss nach dem Beginn liegen.');return}S.slots.push({id:uid++,name:n,start:a,end:b,dur:0,cap:Math.max(1,parseInt($('sc').value)||1)});$('sn').value='';$('sc').value=4;R=null;save();render();out()}
 function addPerson(){var ns=$('pn').value.split(/[\n,;]+/).map(function(x){return x.trim()}).filter(Boolean);if(!ns.length)return;ns.forEach(function(n){S.persons.push({id:uid++,name:n,av:[]})});$('pn').value='';R=null;save();render();out()}
 $('sa').onclick=addSlot;$('pa').onclick=addPerson;
 $('sn').onkeydown=function(e){if(e.key==='Enter')addSlot()};
@@ -122,7 +130,7 @@ document.addEventListener('click',function(e){
  if(t.dataset.dp){var pid=+t.dataset.dp;S.persons=S.persons.filter(function(p){return p.id!==pid});R=null;save();render();out()}
 });
 document.addEventListener('change',function(e){
- var t=e.target;if(t.dataset.cs){var sl=S.slots.filter(function(x){return x.id==t.dataset.cs})[0];sl.cap=Math.max(1,parseInt(t.value)||1);R=null;save();render();out();return}if(t.dataset.p===undefined)return;
+ var t=e.target;if(t.dataset.st||t.dataset.en||t.dataset.du){var sx=S.slots.filter(function(x){return x.id==(t.dataset.st||t.dataset.en||t.dataset.du)})[0];if(t.dataset.st)sx.start=pm(t.value,sx.start);if(t.dataset.en)sx.end=pm(t.value,sx.end);if(t.dataset.du)sx.dur=Math.max(0,parseInt(t.value)||0);save();render();out();return}if(t.dataset.cs){var sl=S.slots.filter(function(x){return x.id==t.dataset.cs})[0];sl.cap=Math.max(1,parseInt(t.value)||1);R=null;save();render();out();return}if(t.dataset.p===undefined)return;
  var p=S.persons.filter(function(x){return x.id==t.dataset.p})[0],s=+t.dataset.s;
  p.av=p.av.filter(function(x){return x!==s});if(t.checked)p.av.push(s);
  R=null;save();out()});
@@ -166,7 +174,7 @@ $('go').onclick=function(){solve();out()};
 $('sh').onclick=function(){solve();out()};
 $('cp').onclick=function(){
  if(!R)return;
- var t=S.slots.map(function(s){return s.name+': '+(R.asg[s.id].map(function(p){return p.name}).join(', ')||'–')}).join('\n');
+ var t=S.slots.map(function(s){return slotLabel(s)+'\n'+(R.asg[s.id].map(function(p,i){return '  '+rng(s,i)+' '+p.name}).join('\n')||'  -')}).join('\n\n');
  if(R.un.length)t+='\nNicht eingeteilt: '+R.un.map(function(p){return p.name}).join(', ');
  try{navigator.clipboard.writeText(t)}catch(e){}
 };
@@ -179,7 +187,7 @@ function pdf(){
  var d=new window.jspdf.jsPDF(),y=20,M=18;
  function ln(t,sz,b,g){d.setFont('helvetica',b?'bold':'normal');d.setFontSize(sz);if(y>280){d.addPage();y=20}d.text(String(t),M,y);y+=g}
  ln('Zeitslot-Einteilung',18,1,10);
- S.slots.forEach(function(s){var l=R.asg[s.id];y+=3;ln(s.name+'  ('+l.length+'/'+s.cap+')',13,1,7);if(!l.length)ln('-',11,0,6);l.forEach(function(p){ln('- '+p.name,11,0,6)})});
+ S.slots.forEach(function(s){var l=R.asg[s.id];y+=3;ln(s.name+'  '+tm(s.start)+' - '+tm(s.end)+' Uhr',13,1,7);if(!l.length)ln('-',11,0,6);l.forEach(function(p,i){var a=s.start+i*dur(s);ln(tm(a)+' - '+tm(a+dur(s))+'   '+p.name,11,0,6)})});
  if(R.un.length){y+=3;ln('Nicht eingeteilt',13,1,7);R.un.forEach(function(p){ln('- '+p.name,11,0,6)})}
  d.save('Zeitslot-Einteilung.pdf');
 }
@@ -188,16 +196,16 @@ function pc(p){return '<span class="pc" data-pid="'+p.id+'">'+esc(p.name)+'</spa
 function out(){
  var o=$('out');
  if(!R){o.innerHTML='<span class="empty">Noch keine Einteilung berechnet.</span>';return}
- var h='<div class="mu">Namen ziehen und ablegen: grün leuchtet, wo die Person Zeit hat.</div>';
+ var h='<div class="mu">Namen ziehen und ablegen: grün leuchtet, wo die Person Zeit hat. Die Reihenfolge im Slot bestimmt die Uhrzeit.</div>';
  if(S.persons.length)h+='<div class="box zone '+(R.un.length?'bad':'ok')+'" data-z="un"><b>'+(R.un.length?'Nicht eingeteilt ('+R.un.length+')':'Alle '+S.persons.length+' Personen eingeteilt ✓')+'</b>'+R.un.map(pc).join('')+'</div>';
- S.slots.forEach(function(s){var l=R.asg[s.id];h+='<div class="box zone" data-z="'+s.id+'"><b>'+esc(s.name)+' <span class="mu'+(l.length>s.cap?' over':'')+'">('+l.length+'/'+s.cap+')</span></b>'+(l.length?l.map(pc).join(''):'<span class="empty">frei</span>')+'</div>'});
+ S.slots.forEach(function(s){var l=R.asg[s.id];h+='<div class="box zone" data-z="'+s.id+'"><b>'+esc(s.name)+' '+tm(s.start)+'–'+tm(s.end)+' <span class="mu'+(l.length>s.cap?' over':'')+'">('+l.length+'/'+s.cap+')</span></b>'+(l.length?l.map(function(p,i){var a=s.start+i*dur(s);return '<div class="pc pr" data-pid="'+p.id+'"><span class="t'+(a+dur(s)>s.end?' over':'')+'">'+tm(a)+'–'+tm(a+dur(s))+'</span>'+esc(p.name)+'</div>'}).join(''):'<span class="empty">frei</span>')+'</div>'});
  o.innerHTML=h;
 }
 
-function moveTo(p,z){
+function moveTo(p,z,ix){
  R.un=R.un.filter(function(x){return x.id!==p.id});
  Object.keys(R.asg).forEach(function(k){R.asg[k]=R.asg[k].filter(function(x){return x.id!==p.id})});
- if(z!=='un'&&R.asg[z])R.asg[z].push(p);else R.un.push(p);
+ if(z!=='un'&&R.asg[z]){var L=R.asg[z];L.splice(ix==null?L.length:Math.min(ix,L.length),0,p)}else R.un.push(p);
  save();out();
 }
 
@@ -207,13 +215,18 @@ function dmove(e){
  if(!dg)return;dg.x=e.clientX;dg.y=e.clientY;
  dg.g.style.left=dg.x+'px';dg.g.style.top=dg.y+'px';
  document.querySelectorAll('.zone.hov').forEach(function(n){n.classList.remove('hov')});
- var z=zoneAt(dg.x,dg.y);if(z)z.classList.add('hov');
+ document.querySelectorAll('.ib,.ie').forEach(function(n){n.classList.remove('ib','ie')});
+ var z=zoneAt(dg.x,dg.y);dg.idx=null;
+ if(z){z.classList.add('hov');
+  if(z.dataset.z!=='un'){var rs=[].filter.call(z.querySelectorAll('.pr'),function(n){return +n.dataset.pid!==dg.p.id}),i=0;
+   rs.forEach(function(n){var b=n.getBoundingClientRect();if(b.top+b.height/2<dg.y)i++});
+   dg.idx=i;if(i<rs.length)rs[i].classList.add('ib');else z.classList.add('ie')}}
 }
 function dend(e,drop){
  if(!dg)return;
- var z=drop?zoneAt(e.clientX,e.clientY):null,p=dg.p;
+ var z=drop?zoneAt(e.clientX,e.clientY):null,p=dg.p,ix=dg.idx;
  clearInterval(dt);dg.g.remove();document.body.classList.remove('dragging');dg=null;
- if(z)moveTo(p,z.dataset.z);else out();
+ if(z)moveTo(p,z.dataset.z,ix);else out();
 }
 $('out').addEventListener('pointerdown',function(e){
  var c=e.target.closest('.pc');if(!c||dg)return;
@@ -234,7 +247,21 @@ function loadR(){try{var r=JSON.parse(localStorage.getItem('zr')||'null');if(!r)
  S.slots.forEach(function(s){R.asg[s.id]=[];take((r.a||{})[s.id],R.asg[s.id])});
  take(r.u,R.un);take(S.persons.map(function(p){return p.id}),R.un)}catch(e){R=null}}
 
-loadR();render();out();
+function tm(m){m=Math.max(0,m|0);return ('0'+Math.floor(m/60)%24).slice(-2)+':'+('0'+m%60).slice(-2)}
+function pm(v,f){var m=/^(\d{1,2}):(\d{2})/.exec(v||'');return m?(+m[1])*60+(+m[2]):f}
+function dur(s){return s.dur>0?s.dur:Math.max(1,Math.floor((s.end-s.start)/s.cap))}
+function rng(s,i){var a=s.start+i*dur(s);return tm(a)+'–'+tm(a+dur(s))}
+function slotLabel(s){return s.name+' '+tm(s.start)+'–'+tm(s.end)}
+function migrate(){S.slots.forEach(function(s){
+ if(typeof s.start==='number')return;
+ var m=/(\d{1,2})(?::(\d{2}))?\s*(?:-|–|bis)\s*(\d{1,2})(?::(\d{2}))?/.exec(s.name);
+ if(m){s.start=(+m[1])*60+(+(m[2]||0));s.end=(+m[3])*60+(+(m[4]||0));var n=s.name.replace(m[0],'').replace(/\s*Uhr\s*$/i,'').trim();if(n)s.name=n}
+ else{s.start=840;s.end=900}
+ if(s.end<=s.start)s.end=s.start+60;
+ s.dur=s.dur||0;
+});save()}
+
+loadR();migrate();render();out();
 </script>
 </body>
 </html>
